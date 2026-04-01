@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 from encrypter import Encryption
 
 ctk.set_appearance_mode("dark")
