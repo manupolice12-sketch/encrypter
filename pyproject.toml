@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=72.0", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "encrypter"
+version = "1.0.0"
+description = "A cross-platform file encryption and decryption tool with CLI and GUI support"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=44.0",
+    "customtkinter>=5.2.0",
+]
+
+[project.scripts]
+encrypter-cli = "src.cli-encryption:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
