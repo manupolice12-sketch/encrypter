@@ -1,7 +1,6 @@
 from cryptography.fernet import Fernet
 import os
 import json
-import getpass
 import sys
 import subprocess
 from cryptography.hazmat.primitives import hashes
@@ -25,14 +24,8 @@ class Encryption:
         self.salt = None
         self.origin = {}
 
-    def Encrypt(self, path):
+    def Encrypt(self, path, password):
         os.chdir(path)
-        password = getpass.getpass("Enter password to encrypt files: ")
-        confirm = getpass.getpass("Confirm password: ")
-        if password != confirm:
-            print("Passwords do not match. Exiting.")
-            sys.exit(1)
-
         self.origin = {}
         self.salt = os.urandom(16)
         kdf = PBKDF2HMAC(
@@ -60,7 +53,6 @@ class Encryption:
 
         self.SaveKeyAndMapping()
         self.hide_files()
-        print("Files encrypted successfully.")
 
     def SaveKeyAndMapping(self):
         with open(SALT_FILE, 'wb') as f:
@@ -92,13 +84,12 @@ class Encryption:
             if os.path.exists(HIDDEN_MAPPING):
                 os.rename(HIDDEN_MAPPING, MAPPING_FILE)
 
-    def Decrypt(self, path):
+    def Decrypt(self, path, password):
         os.chdir(path)
         self.show_files()
 
         with open(SALT_FILE, 'rb') as f:
             salt = f.read()
-        password = getpass.getpass("Enter password to decrypt files: ")
 
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -107,16 +98,16 @@ class Encryption:
             iterations=100000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-
         fernet = Fernet(key)
+
         try:
             with open(MAPPING_FILE, 'rb') as f:
                 encrypted_mapping = f.read()
             decrypted_mapping = fernet.decrypt(encrypted_mapping).decode()
             origin = json.loads(decrypted_mapping)
         except Exception:
-            print("Incorrect password. Exiting.")
-            sys.exit(1)
+            self.hide_files()
+            raise ValueError("Incorrect password.")
 
         for enc_name, orig_name in origin.items():
             with open(enc_name, 'rb') as f:
@@ -128,4 +119,3 @@ class Encryption:
 
         os.remove(SALT_FILE)
         os.remove(MAPPING_FILE)
-        print("Files decrypted successfully.")
