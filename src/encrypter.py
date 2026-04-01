@@ -86,11 +86,19 @@ class Encryption:
 
     def Decrypt(self, path, password):
         os.chdir(path)
-        self.show_files()
-
-        with open(SALT_FILE, 'rb') as f:
-            salt = f.read()
-
+        
+        if sys.platform == "win32":
+            salt_file = 'salt.bin'
+            mapping_file = 'file_mapping.json'
+            subprocess.run(['attrib', '-h', salt_file], shell=True, creationflags=0x08000000)
+            subprocess.run(['attrib', '-h', mapping_file], shell=True, creationflags=0x08000000)
+        else:
+            salt_file = '.salt.bin' if os.path.exists('.salt.bin') else 'salt.bin'
+            mapping_file = '.file_mapping.json' if os.path.exists('.file_mapping.json') else 'file_mapping.json'
+        
+        with open(salt_file, 'rb') as f:
+            salt = f.read(16)
+        
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -99,23 +107,31 @@ class Encryption:
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
         fernet = Fernet(key)
-
+        
         try:
-            with open(MAPPING_FILE, 'rb') as f:
+            with open(mapping_file, 'rb') as f:
                 encrypted_mapping = f.read()
             decrypted_mapping = fernet.decrypt(encrypted_mapping).decode()
             origin = json.loads(decrypted_mapping)
         except Exception:
-            self.hide_files()
+            if sys.platform == "win32":
+                subprocess.run(['attrib', '+h', salt_file], shell=True, creationflags=0x08000000)
+                subprocess.run(['attrib', '+h', mapping_file], shell=True, creationflags=0x08000000)
+            else:
+                if os.path.exists(salt_file):
+                    os.rename(salt_file, HIDDEN_SALT)
+                if os.path.exists(mapping_file):
+                    os.rename(mapping_file, HIDDEN_MAPPING)
             raise ValueError("Incorrect password.")
-
+        
         for enc_name, orig_name in origin.items():
-            with open(enc_name, 'rb') as f:
-                encrypted_data = f.read()
-            decrypted = fernet.decrypt(encrypted_data)
-            with open(orig_name, 'wb') as f:
-                f.write(decrypted)
-            os.remove(enc_name)
-
-        os.remove(SALT_FILE)
-        os.remove(MAPPING_FILE)
+            if os.path.exists(enc_name):
+                with open(enc_name, 'rb') as f:
+                    encrypted_data = f.read()
+                decrypted = fernet.decrypt(encrypted_data)
+                with open(orig_name, 'wb') as f:
+                    f.write(decrypted)
+                os.remove(enc_name)
+        
+        os.remove(salt_file)
+        os.remove(mapping_file)
