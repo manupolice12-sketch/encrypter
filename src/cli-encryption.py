@@ -3,7 +3,7 @@ import getpass
 import sys
 
 
-def _progress(current: int, total: int, filename: str) -> None:
+def progress(current: int, total: int, filename: str) -> None:
     bar_width = 30
     filled = int(bar_width * current / total)
     bar = '█' * filled + '░' * (bar_width - filled)
@@ -26,7 +26,7 @@ def main():
             print("Passwords do not match. Exiting.")
             sys.exit(1)
         print("Encrypting...")
-        tool.Encrypt(path, password, progress_callback=_progress)
+        tool.Encrypt(path, password, progress_callback=progress)
         print("Files encrypted successfully.")
 
     elif command == "decrypt":
@@ -34,7 +34,7 @@ def main():
         password = getpass.getpass("Enter password: ")
         try:
             print("Decrypting...")
-            tool.Decrypt(path, password, progress_callback=_progress)
+            tool.Decrypt(path, password, progress_callback=progress)
             print("Files decrypted successfully.")
         except (ValueError, FileNotFoundError) as e:
             print(e)
