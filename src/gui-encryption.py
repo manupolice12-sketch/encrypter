@@ -111,7 +111,8 @@ def encrypt():
             window.after(0, lambda: password_entry.delete(0, "end"))
             window.after(0, lambda: confirm_entry.delete(0, "end"))
         except Exception as e:
-            window.after(0, lambda: set_status(f"Error: {e}", "red"))
+            msg = f"Error: {e}"
+            window.after(0, lambda m=msg: set_status(m, "red"))
         finally:
             window.after(0, lambda: set_buttons_enabled(True))
             window.after(0, lambda: file_label.configure(text=""))
@@ -140,11 +141,14 @@ def decrypt():
             window.after(0, lambda: password_entry.delete(0, "end"))
             window.after(0, lambda: confirm_entry.delete(0, "end"))
         except ValueError as e:
-            window.after(0, lambda: set_status(str(e), "red"))
+            msg = str(e)
+            window.after(0, lambda m=msg: set_status(m, "red"))
         except FileNotFoundError as e:
-            window.after(0, lambda: set_status(str(e), "red"))
+            msg = str(e)
+            window.after(0, lambda m=msg: set_status(m, "red"))
         except Exception as e:
-            window.after(0, lambda: set_status(f"Error: {e}", "red"))
+            msg = f"Error: {e}"
+            window.after(0, lambda m=msg: set_status(m, "red"))
         finally:
             window.after(0, lambda: set_buttons_enabled(True))
             window.after(0, lambda: file_label.configure(text=""))

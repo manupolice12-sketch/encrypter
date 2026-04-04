@@ -130,13 +130,14 @@ class Encryption:
                 if progress_callback:
                     progress_callback(i + 1, total, filename)
 
-            salt_path = os.path.join(work_dir, SALT_FILE)
-            with open(salt_path, 'wb') as f:
-                f.write(self.salt)
-
             mapping_json = json.dumps(self.origin)
             encrypted_mapping = fernet.encrypt(mapping_json.encode())
-            mapping_path = os.path.join(work_dir, MAPPING_FILE)
+
+            salt_path = os.path.join(path, SALT_FILE)
+            mapping_path = os.path.join(path, MAPPING_FILE)
+
+            with open(salt_path, 'wb') as f:
+                f.write(self.salt)
             with open(mapping_path, 'wb') as f:
                 f.write(encrypted_mapping)
 
