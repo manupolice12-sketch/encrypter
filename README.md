@@ -58,3 +58,7 @@ Current release: **v1.0.0**
 ## Warning 
 
 If you lose your password say goodbye to your files you encrypted as they are not recoverable
+
+## Executable
+
+Inside the dist folder you will find an executable for windows soon one for Linux and MacOS will come
