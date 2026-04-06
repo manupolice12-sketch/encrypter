@@ -1,7 +1,8 @@
 import threading
 import customtkinter as ctk
-from tkinter import filedialog
+import tkinter as tk
 from encrypter import Encryption
+import os 
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -12,6 +13,20 @@ window = ctk.CTk()
 window.title("File Encrypter and Decrypter")
 window.geometry("420x400")
 window.resizable(False, False)
+window.after(200, lambda: set_icon())
+
+def set_icon():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(current_dir, "image", "icon.png")
+    icon_image = tk.PhotoImage(file=icon_path)
+    try:
+      if os.path.exists(icon_path):
+          window.iconphoto(False, icon_image)
+      else:
+          raise FileNotFoundError(f"Icon not found at {icon_path}")  
+    except Exception as e:
+        raise FileNotFoundError(f"The icon couldn't be loaded")
+        
 
 folder_frame = ctk.CTkFrame(window, fg_color="transparent")
 folder_frame.pack(padx=20, pady=(20, 0), fill="x")
@@ -23,7 +38,7 @@ path_entry.pack(side="left", expand=True, fill="x", padx=(0, 8))
 
 
 def browse():
-    path = filedialog.askdirectory(title="Select Folder")
+    path = tk.filedialog.askdirectory(title="Select Folder")
     if path:
         path_entry.delete(0, "end")
         path_entry.insert(0, path)

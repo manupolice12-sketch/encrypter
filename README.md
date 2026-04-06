@@ -54,3 +54,7 @@ Current release: **v1.0.0**
 
 - GitHub: [manupolice12-sketch/encrypter](https://github.com/manupolice12-sketch/encrypter)
 - Bug Reports: [GitHub Issues](https://github.com/manupolice12-sketch/encrypter/issues)
+ 
+## Warning 
+
+If you lose your password say goodbye to your files you encrypted as they are not recoverable
