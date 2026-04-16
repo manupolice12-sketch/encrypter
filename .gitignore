@@ -7,3 +7,7 @@ dist/
 __pycache__/
 venv/
 .env
+
+#VS Code
+  .vscode/
+  
