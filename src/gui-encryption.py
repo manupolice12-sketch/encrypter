@@ -59,7 +59,6 @@ confirm_entry = ctk.CTkEntry(confirm_frame, placeholder_text="Confirm password..
 confirm_entry.pack(fill="x", pady=(4, 0))
 
 progress_bar = ctk.CTkProgressBar(window, width=380)
-progress_bar.pack(padx=20, pady=(14, 0), fill="x")
 progress_bar.set(0)
 
 file_label = ctk.CTkLabel(window, text="", font=ctk.CTkFont(size=11), text_color="gray")
@@ -102,6 +101,7 @@ def reset_progress():
 
 
 def encrypt():
+    global progress_bar
     path = path_entry.get().strip()
     password = password_entry.get()
     confirm = confirm_entry.get()
@@ -114,7 +114,7 @@ def encrypt():
     if password != confirm:
         set_status("Passwords do not match.", "red")
         return
-
+    progress_bar.pack(padx=20, pady=(14, 0), fill="x")
     set_buttons_enabled(False)
     reset_progress()
     set_status("Encrypting...", "gray")
@@ -125,6 +125,7 @@ def encrypt():
             window.after(0, lambda: set_status("Files encrypted successfully.", "green"))
             window.after(0, lambda: password_entry.delete(0, "end"))
             window.after(0, lambda: confirm_entry.delete(0, "end"))
+            window.after(0, lambda: progress_bar.pack_forget())
         except Exception as e:
             msg = f"Error: {e}"
             window.after(0, lambda m=msg: set_status(m, "red"))
@@ -136,6 +137,8 @@ def encrypt():
 
 
 def decrypt():
+    global progress_bar
+    progress_bar.pack(padx=20, pady=(14, 0), fill="x")
     path = path_entry.get().strip()
     password = password_entry.get()
     if not path:
