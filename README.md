@@ -59,6 +59,10 @@ Current release: **v1.0.0**
 
 If you lose your password say goodbye to your files you encrypted as they are not recoverable.
 
+## Licence
+
+This project is Licenced under the GNU General Public Licence Version 3
+
 ## Executable
 
 Inside the dist folder you will find an executable for windows soon one for Linux and MacOS will come and if your running it please click run anyway when Windows Defender SmartScreen says unknown publisher
