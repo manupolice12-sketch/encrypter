@@ -1,0 +1,9 @@
+# PyInstaller
+build/
+dist/
+*.exe
+
+# Python
+__pycache__/
+venv/
+.env
