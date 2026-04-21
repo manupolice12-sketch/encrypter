@@ -3,8 +3,11 @@ name: Build and Release Cross-Platform
 on:
   push:
     tags:
-      - 'v*' # Triggers on v1.0, v1.1.0, etc.
-  workflow_dispatch: # Allows manual triggering
+      - 'v*' # Only triggers on version tags like v1.1.0
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -23,37 +26,39 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      # LINUX BUILD
-      - name: Build Linux Binary
+      - name: Install System Dependencies (Linux Only)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          pyinstaller --onefile --windowed --name "Encrypter-Linux" \
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libtk8.6
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build Binary
+        run: |
+          # We use specific names to avoid confusion in the release assets
+          python -m PyInstaller --onefile --windowed \
+          --name "Encrypter-${{ matrix.os }}" \
           --add-data "src/image/icon.png:image" \
           --add-data "src/encrypter.py:." \
           src/gui-encryption.py
 
-      # MACOS BUILD
-      - name: Build macOS App
+      - name: Post-Build macOS (Zip App)
         if: matrix.os == 'macos-latest'
         run: |
-          pyinstaller --onefile --windowed --name "Encrypter-MacOS" \
-          --add-data "src/image/icon.png:image" \
-          --add-data "src/encrypter.py:." \
-          src/gui-encryption.py
-          # Zip the .app folder so it can be uploaded
-          cd dist && zip -r Encrypter-MacOS.zip Encrypter-MacOS.app
+          cd dist
+          # macOS .app is a folder, must be zipped for Release
+          zip -r Encrypter-MacOS.zip Encrypter-macos-latest.app
 
-      # RELEASE
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Encrypter-Linux
+            dist/Encrypter-ubuntu-latest
             dist/Encrypter-MacOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
