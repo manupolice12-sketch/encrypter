@@ -65,4 +65,6 @@ This project is Licenced under the GNU General Public Licence Version 3
 
 ## Executable
 
+As of know this project's executable is only Windows compatible soon Linux and MacOS version will be included
+
 Inside the dist folder you will find an executable for windows soon one for Linux and MacOS will come and if your running it please click run anyway when Windows Defender SmartScreen says unknown publisher or use the encrypter-setup.exe and install the app
