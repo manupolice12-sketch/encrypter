@@ -66,6 +66,6 @@ This project is Licenced under the GNU General Public Licence Version 3
 
 ## Executable
 
-As of know this project's executable is only Windows compatible soon Linux and MacOS version will be included
+As of know this project's executables are finally there for all major platforms including Windows, Linux and MacOS
 
 
