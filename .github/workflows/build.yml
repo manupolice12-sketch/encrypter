@@ -1,8 +1,10 @@
-name: Build Cross-Platform Releases
-on: 
+name: Build and Release Cross-Platform
+
+on:
   push:
-    branches: [ main ]
-  workflow_dispatch: # Allows you to run it manually
+    tags:
+      - 'v*' # Triggers on v1.0, v1.1.0, etc.
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
   build:
@@ -10,7 +12,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # Building for both Ubuntu (Linux) and macOS
         os: [ubuntu-latest, macos-latest]
 
     steps:
@@ -27,7 +28,8 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build with PyInstaller (Linux)
+      # LINUX BUILD
+      - name: Build Linux Binary
         if: matrix.os == 'ubuntu-latest'
         run: |
           pyinstaller --onefile --windowed --name "Encrypter-Linux" \
@@ -35,18 +37,23 @@ jobs:
           --add-data "src/encrypter.py:." \
           src/gui-encryption.py
 
-      - name: Build with PyInstaller (macOS)
+      # MACOS BUILD
+      - name: Build macOS App
         if: matrix.os == 'macos-latest'
         run: |
           pyinstaller --onefile --windowed --name "Encrypter-MacOS" \
           --add-data "src/image/icon.png:image" \
           --add-data "src/encrypter.py:." \
           src/gui-encryption.py
+          # Zip the .app folder so it can be uploaded
+          cd dist && zip -r Encrypter-MacOS.zip Encrypter-MacOS.app
 
-      - name: Upload Binaries
-        uses: actions/upload-artifact@v4
+      # RELEASE
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Encrypter-${{ matrix.os }}
-          path: |
+          files: |
             dist/Encrypter-Linux
-            dist/Encrypter-MacOS.app
+            dist/Encrypter-MacOS.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
