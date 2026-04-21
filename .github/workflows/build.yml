@@ -1,0 +1,52 @@
+name: Build Cross-Platform Releases
+on: 
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows you to run it manually
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Building for both Ubuntu (Linux) and macOS
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pyinstaller --onefile --windowed --name "Encrypter-Linux" \
+          --add-data "src/image/icon.png:image" \
+          --add-data "src/encrypter.py:." \
+          src/gui-encryption.py
+
+      - name: Build with PyInstaller (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          pyinstaller --onefile --windowed --name "Encrypter-MacOS" \
+          --add-data "src/image/icon.png:image" \
+          --add-data "src/encrypter.py:." \
+          src/gui-encryption.py
+
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: Encrypter-${{ matrix.os }}
+          path: |
+            dist/Encrypter-Linux
+            dist/Encrypter-MacOS.app
