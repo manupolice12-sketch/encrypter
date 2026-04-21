@@ -25,10 +25,13 @@ def main():
         if password != confirm:
             print("Passwords do not match. Exiting.")
             sys.exit(1)
-        print("Encrypting...")
-        tool.Encrypt(path, password, progress_callback=_progress)
-        print("Files encrypted successfully.")
-
+        if input("Are you sure? All files in the folder will be encrypted type y to continue") == "y":
+           print("Encrypting...")
+           tool.Encrypt(path, password, progress_callback=_progress)
+           print("Files encrypted successfully.")
+        else:
+            sys.exit(1)
+            
     elif command == "decrypt":
         path = input("Enter the directory path to decrypt files: ").strip()
         password = getpass.getpass("Enter password: ")

@@ -1,7 +1,6 @@
 import threading
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import messagebox
 from encrypter import Encryption
 import os 
 
@@ -90,10 +89,47 @@ def make_progress_callback():
     return callback
 
 
+def get_password_confirmation(title, text):
+    dialog = ctk.CTkToplevel(window)
+    dialog.title(title)
+    dialog.geometry("300x150")
+    dialog.resizable(False, False)
+    dialog.grab_set()
+    dialog.focus()
+
+    label = ctk.CTkLabel(dialog, text=text)
+    label.pack(pady=(20, 10))
+
+    entry = ctk.CTkEntry(dialog, show="*")
+    entry.pack(pady=(0, 20))
+
+    result = [None]
+
+    def on_ok():
+        result[0] = entry.get()
+        dialog.destroy()
+
+    def on_cancel():
+        result[0] = None
+        dialog.destroy()
+
+    dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+
+    btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    btn_frame.pack(fill="x", padx=20, pady=(0, 20))
+
+    ok_btn = ctk.CTkButton(btn_frame, text="OK", command=on_ok)
+    ok_btn.pack(side="left", expand=True, padx=(0, 5))
+
+    cancel_btn = ctk.CTkButton(btn_frame, text="Cancel", command=on_cancel)
+    cancel_btn.pack(side="right", expand=True, padx=(5, 0))
+
+    dialog.wait_window()
+    return result[0]
+
 def reset_progress():
     progress_bar.set(0)
     file_label.configure(text="")
-
 
 def encrypt():
     global progress_bar
@@ -105,8 +141,10 @@ def encrypt():
     if not password:
         set_status("Please enter a password.", "red")
         return
-    dialog = ctk.CTkInputDialog(text="Confirm password:", title="Confirm Password")
-    confirm = dialog.get_input()
+    confirm = get_password_confirmation("Confirm Password", "Confirm password:")
+    if confirm is None:
+        set_status("Confirmation cancelled.", "red")
+        return
     if confirm != password:
         set_status("Passwords do not match.", "red")
         return
@@ -120,20 +158,19 @@ def encrypt():
             tool.Encrypt(path, password, progress_callback=make_progress_callback())
             window.after(0, lambda: set_status("Files encrypted successfully.", "green"))
             window.after(0, lambda: password_entry.delete(0, "end"))
-            window.after(0, lambda: progress_bar.pack_forget())
         except Exception as e:
             msg = f"Error: {e}"
             window.after(0, lambda m=msg: set_status(m, "red"))
         finally:
             window.after(0, lambda: set_buttons_enabled(True))
             window.after(0, lambda: file_label.configure(text=""))
+            window.after(0, lambda: progress_bar.pack_forget())
 
     threading.Thread(target=run, daemon=True).start()
 
 
 def decrypt():
     global progress_bar
-    progress_bar.pack(padx=20, pady=(14, 0), fill="x")
     path = path_entry.get().strip()
     password = password_entry.get()
     if not path:
@@ -142,7 +179,7 @@ def decrypt():
     if not password:
         set_status("Please enter a password.", "red")
         return
-
+    progress_bar.pack(padx=20, pady=(14, 0), fill="x")
     set_buttons_enabled(False)
     reset_progress()
     set_status("Decrypting...", "gray")
@@ -164,6 +201,7 @@ def decrypt():
         finally:
             window.after(0, lambda: set_buttons_enabled(True))
             window.after(0, lambda: file_label.configure(text=""))
+            window.after(0, lambda: progress_bar.pack_forget())
 
     threading.Thread(target=run, daemon=True).start()
 
