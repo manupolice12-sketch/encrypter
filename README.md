@@ -6,7 +6,7 @@ A powerful cross-platform tool to encrypt and decrypt entire folders. Available 
 
 Encrypter uses **Fernet symmetric encryption** with **PBKDF2** password-based key derivation. When you encrypt a folder:
 
-- Every file is encrypted and renamed to a random UUID with no extension
+- Every file is encrypted and renamed to a random UUID with the enc extension
 - The original filenames are stored in an encrypted mapping file
 - The mapping file and salt are automatically hidden from view
 - Subfolders are left untouched
