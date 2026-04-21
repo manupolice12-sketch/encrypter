@@ -48,7 +48,7 @@ python cli-encryption.py
 
 ## Version
 
-Current release: **v1.0.0**
+Current release: **v1.1.0**
 
 ## Links
 
