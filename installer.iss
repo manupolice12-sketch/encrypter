@@ -9,7 +9,7 @@ SolidCompression=yes
 OutputDir=.
 OutputBaseFilename=Encrypter-Setup
 ; Add your license file here if you want it to show during setup
-; LicenseFile=LICENSE.txt
+ LicenseFile=LICENCE.txt
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
