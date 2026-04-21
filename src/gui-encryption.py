@@ -1,6 +1,7 @@
 import threading
 import customtkinter as ctk
 import tkinter as tk
+from tkinter import messagebox
 from encrypter import Encryption
 import os 
 
@@ -11,7 +12,7 @@ tool = Encryption()
 
 window = ctk.CTk()
 window.title("File Encrypter and Decrypter")
-window.geometry("420x400")
+window.geometry("420x350")
 window.resizable(False, False)
 window.after(200, lambda: set_icon())
 
@@ -51,12 +52,6 @@ pw_frame.pack(padx=20, pady=(12, 0), fill="x")
 ctk.CTkLabel(pw_frame, text="Password", anchor="w").pack(fill="x")
 password_entry = ctk.CTkEntry(pw_frame, placeholder_text="Enter password...", show="*")
 password_entry.pack(fill="x", pady=(4, 0))
-
-confirm_frame = ctk.CTkFrame(window, fg_color="transparent")
-confirm_frame.pack(padx=20, pady=(12, 0), fill="x")
-ctk.CTkLabel(confirm_frame, text="Confirm Password", anchor="w").pack(fill="x")
-confirm_entry = ctk.CTkEntry(confirm_frame, placeholder_text="Confirm password...", show="*")
-confirm_entry.pack(fill="x", pady=(4, 0))
 
 progress_bar = ctk.CTkProgressBar(window, width=380)
 progress_bar.set(0)
@@ -104,14 +99,15 @@ def encrypt():
     global progress_bar
     path = path_entry.get().strip()
     password = password_entry.get()
-    confirm = confirm_entry.get()
     if not path:
         set_status("Please select a folder.", "red")
         return
     if not password:
         set_status("Please enter a password.", "red")
         return
-    if password != confirm:
+    dialog = ctk.CTkInputDialog(text="Confirm password:", title="Confirm Password")
+    confirm = dialog.get_input()
+    if confirm != password:
         set_status("Passwords do not match.", "red")
         return
     progress_bar.pack(padx=20, pady=(14, 0), fill="x")
@@ -124,7 +120,6 @@ def encrypt():
             tool.Encrypt(path, password, progress_callback=make_progress_callback())
             window.after(0, lambda: set_status("Files encrypted successfully.", "green"))
             window.after(0, lambda: password_entry.delete(0, "end"))
-            window.after(0, lambda: confirm_entry.delete(0, "end"))
             window.after(0, lambda: progress_bar.pack_forget())
         except Exception as e:
             msg = f"Error: {e}"
@@ -157,7 +152,6 @@ def decrypt():
             tool.Decrypt(path, password, progress_callback=make_progress_callback())
             window.after(0, lambda: set_status("Files decrypted successfully.", "green"))
             window.after(0, lambda: password_entry.delete(0, "end"))
-            window.after(0, lambda: confirm_entry.delete(0, "end"))
         except ValueError as e:
             msg = str(e)
             window.after(0, lambda m=msg: set_status(m, "red"))
