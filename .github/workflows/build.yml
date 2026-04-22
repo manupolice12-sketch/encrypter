@@ -42,7 +42,7 @@ jobs:
         run: |
           # We use specific names to avoid confusion in the release assets
           python -m PyInstaller --onefile --windowed \
-          --name "Encrypter-${{ matrix.os }}" \
+          --name "Encrypter-Linux" \
           --add-data "src/image/icon.png:image" \
           --add-data "src/encrypter.py:." \
           src/gui-encryption.py
