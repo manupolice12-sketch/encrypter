@@ -68,4 +68,8 @@ This project is Licenced under the GNU General Public Licence Version 3
 
 As of know this project's executables are finally there for all major platforms including Windows, Linux and MacOS
 
+## Note for MacOS users
+  
+ You may need to right-click the app and select "Open" the first time to bypass Gatekeeper and ensure the app has permission to access the folders you wish to encrypt  
+
 
