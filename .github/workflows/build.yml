@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
 
     steps:
       - name: Checkout Code
@@ -27,7 +27,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install System Dependencies (Linux Only)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-tk libtk8.6
