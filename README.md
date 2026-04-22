@@ -24,7 +24,7 @@ Then clone the repository:
 ```bash
 git clone https://github.com/manupolice12-sketch/encrypter
 ```
-or if your using windows use the Encrypter.exe or Encrypter-setup.exe
+or use the executables included in the releases
 
 ## Usage
 
