@@ -5,7 +5,8 @@ This module handles the heavy lifting of securing your files.
 It uses 'Fernet' (Symmetric encryption) and PBKDF2 (Password-based key derivation)
 to ensure that files are unreadable without the correct password.
 """
-
+# Fernet uses AES-128 in CBC mode with an HMAC for authentication.
+# This ensures that files cannot be tampered with while encrypted.
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
