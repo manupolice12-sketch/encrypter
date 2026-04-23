@@ -30,7 +30,11 @@ or use the executables included in the releases
 
 ### GUI
 
-Run `gui-encryption.py` to open the graphical interface. Select a folder using the Browse button, enter and confirm your password, then click Encrypt or Decrypt.
+Run `gui-encryption.py` to open the graphical interface. Select a folder using the Browse button, enter your password, then click Encrypt or Decrypt If your encrypting a window will popup asking you to confirm you passsowrd confirm it and The files will be encrypted.
+
+```bash
+python gui-encryption.py
+```
 
 ### CLI
 
