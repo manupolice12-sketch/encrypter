@@ -58,7 +58,7 @@ Current release: **v1.2.0**
  
 ## Warning 
 
-If you lose your password say goodbye to your files you encrypted as they are not recoverable.
+If you lose your password say goodbye to your files you encrypted as they are not recoverable and while this tool is designed for high reliability, there is a theoretical "death zone" of approximately 1–5 milliseconds during the final file swap. If the system suffers a total power failure at the exact moment the original is deleted but before the encrypted version is moved into place, data loss could occur so make sure when encrypting you have a stable power source.
 
 ## Licence
 
