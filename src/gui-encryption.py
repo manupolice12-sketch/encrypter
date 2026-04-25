@@ -173,11 +173,16 @@ def start_task(mode):
     progress_bar.pack(pady=10)
     progress_bar.set(0)
     set_status(f"{mode.capitalize()}ing files...", "gray")
-
     def run():
         try:
             if mode == "encrypt":
-                tool.Encrypt(path, password, progress_callback=make_progress_callback())
+                if tool.backup_possible == False:
+                    # Using a TopLevel window for thread-compatible status display
+                    window.after(0, lambda: set_status("Risk: No space for backup. Encrypting in-place...", "orange"))
+                    tool.Encrypt(path, password, progress_callback=make_progress_callback())
+                else:
+                    # Logic for when backup is possible
+                    tool.Encrypt(path, password, progress_callback=make_progress_callback())
             else:
                 tool.Decrypt(path, password, progress_callback=make_progress_callback())
             
@@ -186,16 +191,7 @@ def start_task(mode):
         except Exception as e:
             window.after(0, lambda: set_status(f"Error: {str(e)}", "red"))
         finally:
-            # Clean up UI
             window.after(0, lambda: set_buttons_enabled(True))
             window.after(0, lambda: progress_bar.pack_forget())
-            window.after(0, lambda: file_label.configure(text=""))
-
-    # Start the work in the background
-    threading.Thread(target=run, daemon=True).start()
-
-# Connect the buttons to the wrapper function
-encrypt_btn.configure(command=lambda: start_task("encrypt"))
-decrypt_btn.configure(command=lambda: start_task("decrypt"))
-
-window.mainloop()
+            window.after(0, lambda: file_label.configure(text=""))        
+window.mainloop()            

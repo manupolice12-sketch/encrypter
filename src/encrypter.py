@@ -18,6 +18,7 @@ import sys
 import subprocess
 import tempfile
 import uuid
+import pathlib
 
 # --- CONFIGURATION & CONSTANTS ---
 # These variables define how the program recognizes its own system files.
@@ -139,6 +140,8 @@ class Encryption:
         self.key = None
         self.salt = None
         self.origin = {} # Stores 'Encrypted_Name: Original_Name' mapping.
+        self.folder_size = None
+        self.backup_possible = None
 
     def Encrypt(self, path: str, password: str, progress_callback=None) -> None:
         """
@@ -172,7 +175,13 @@ class Encryption:
 
         # 3. Use a temporary directory for safety (prevents data loss if crash occurs).
         work_dir = tempfile.mkdtemp(prefix='enc_work_', dir=path)
-
+        # 4. Create a backup to ensure if in the "death zone" power failure occurs your files will still be recoverable.
+        return self.folder_size(f.stat().st_size for f in path.rglob('*') if f.is_file())
+        disk_usage = shutil.disk_usage
+        if disk_usage > self.folder_size:
+             backup_dir = os.makedirs(f"{path}-Backup")
+        else:
+            self.backup_possible = False
         try:
             for i, filename in enumerate(candidates):
                 src = os.path.join(path, filename)
@@ -211,6 +220,8 @@ class Encryption:
 
         shutil.rmtree(work_dir, ignore_errors=True)
         _hide_files(path)
+        os.remove(backup_dir)
+
 
     def Decrypt(self, path: str, password: str, progress_callback=None) -> None:
         """

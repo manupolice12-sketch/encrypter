@@ -59,11 +59,20 @@ def main():
             
         # Security warning for the user
         warning = input("Warning: All files in this folder will be transformed. Continue? (y/n): ")
-        if warning.lower() == "y":
+        if warning.lower() == "y":    
            print("Processing...")
            try:
-               tool.Encrypt(path, password, progress_callback=_progress)
-               print("Done! Files encrypted successfully.")
+               if tool.backup_possible == False:
+                  Resource_command = input("You don't have enough space to create a backup for your folder. Continue? (y/n)")
+                  if Resource_command.lower().strip() == "y":
+                     tool.Encrypt(path, password, progress_callback=_progress)
+                     print("Done! Files encrypted successfully.")
+                  else:
+                      print("Operation cancelled.")
+                      sys.exit(1) 
+               else:
+                     tool.Encrypt(path, password, progress_callback=_progress)
+                     print("Done! Files encrypted successfully.")      
            except Exception as e:
                print(f"Failed: {e}")
         else:
