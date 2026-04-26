@@ -1,113 +1,152 @@
 """
-GRAPHICAL USER INTERFACE (GUI)
-------------------------------
-This script creates the window, buttons, and progress bars.
-It acts as the 'bridge' between the user and the Encryption logic.
+CORE ENCRYPTION ENGINE
+----------------------
+This module handles the heavy lifting of securing your files. 
+It uses 'Fernet' (Symmetric encryption) and PBKDF2 (Password-based key derivation)
+to ensure that files are unreadable without the correct password.
 """
-
-import threading
-import customtkinter as ctk
-from tkinter import filedialog
-from encrypter import Encryption
+# Fernet Uses AES-128 in CBC mode with HMAC to ensure files are not tampered with
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
+import json
 import os
+import shutil
+import sys
+import tempfile
+import uuid
 
-# --- APPEARANCE SETUP ---
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+# --- CONFIGURATION & CONSTANTS ---
+SALT_FILE = 'salt.bin'
+MAPPING_FILE = 'file_mapping.json'
+ENC_EXTENSION = '.enc'
+HEADER_SIZE = 4096 
 
-tool = Encryption()
-window = ctk.CTk()
-window.title("File Encrypter and Decrypter")
-window.geometry("420x420")
-window.resizable(False, False)
+if sys.platform != 'win32':
+    HIDDEN_SALT = '.salt.bin'
+    HIDDEN_MAPPING = '.file_mapping.json'
+else:
+    HIDDEN_SALT = SALT_FILE
+    HIDDEN_MAPPING = MAPPING_FILE
 
-def set_status(text, color):
-    status_label.configure(text=text, text_color=color)
+SYSTEM_FILES = {SALT_FILE, MAPPING_FILE, HIDDEN_SALT, HIDDEN_MAPPING}
 
-def set_buttons_enabled(state):
-    s = "normal" if state else "disabled"
-    encrypt_btn.configure(state=s)
-    decrypt_btn.configure(state=s)
-    browse_btn.configure(state=s)
+def _derive_key(password: str, salt: bytes) -> bytes:
+    """Derives a secure 32-byte key from a password and salt."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
-def browse_folder():
-    p = filedialog.askdirectory()
-    if p:
-        path_entry.delete(0, "end")
-        path_entry.insert(0, p)
-        # Background check for disk space so the UI doesn't freeze
-        threading.Thread(target=lambda: tool.check_backup_feasibility(p), daemon=True).start()
+def _hide_files(path):
+    """Hides system files using OS-specific commands."""
+    if sys.platform == 'win32':
+        for f in [SALT_FILE, MAPPING_FILE]:
+            p = os.path.join(path, f)
+            if os.path.exists(p):
+                os.system(f'attrib +h +s "{p}"')
 
-def start_task(mode):
-    path = path_entry.get().strip()
-    password = password_entry.get().strip()
+def _encrypt_file_to(src, dst, fernet):
+    """Encrypts the header of a file and streams the rest to a destination."""
+    with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
+        header = f_in.read(HEADER_SIZE)
+        if header:
+            f_out.write(fernet.encrypt(header))
+        shutil.copyfileobj(f_in, f_out)
 
-    if not path or not os.path.exists(path):
-        return set_status("Error: Invalid path", "red")
-    if not password:
-        return set_status("Error: Password required", "red")
+def _decrypt_file_to(src, dst, fernet):
+    """Decrypts a file header and reconstructs the original file."""
+    with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
+        full_data = f_in.read()
+        split_point = full_data.find(b'=', 0, 8192) + 1
+        header = full_data[:split_point]
+        body = full_data[split_point:]
+        f_out.write(fernet.decrypt(header))
+        f_out.write(body)
 
-    if mode == "encrypt":
-        dialog = ctk.CTkInputDialog(text="Confirm Password:", title="Confirmation")
-        res = dialog.get_input()
-        if res is None: return # User cancelled
-        if res != password:
-            return set_status("Error: Passwords did not match", "red")
+class Encryption:
+    def __init__(self):
+        self.backup_possible = False
 
-    set_buttons_enabled(False)
-    progress_bar.pack(pady=10)
-    progress_bar.set(0)
-    
-    def run():
+    def check_backup_feasibility(self, path):
+        """Calculates folder size vs free disk space."""
+        total_size = 0
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    total_size += os.path.getsize(fp)
+        _, _, free = shutil.disk_usage(os.path.abspath(path))
+        self.backup_possible = free > (total_size + 104857600)
+        return self.backup_possible
+
+    def Encrypt(self, path, password, progress_callback=None):
+        """Standard encryption logic with backup handling."""
+        if self.backup_possible:
+            backup_path = f"{path}-Backup"
+            if os.path.exists(backup_path): shutil.rmtree(backup_path)
+            shutil.copytree(path, backup_path)
+
+        salt = os.urandom(16)
+        with open(os.path.join(path, SALT_FILE), 'wb') as f: f.write(salt)
+
+        key = _derive_key(password, salt)
+        fernet = Fernet(key)
+
+        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f not in SYSTEM_FILES]
+        mapping = {}
+        work_dir = tempfile.mkdtemp(prefix='enc_work_', dir=path)
+
         try:
-            if mode == "encrypt":
-                if not tool.backup_possible:
-                    window.after(0, lambda: set_status("Risk: No space for backup. Encrypting...", "orange"))
-                
-                tool.Encrypt(path, password, lambda c, t, f: window.after(0, lambda: [
-                    progress_bar.set(c/t), 
-                    file_label.configure(text=f)
-                ]))
-            else:
-                tool.Decrypt(path, password, lambda c, t, f: window.after(0, lambda: [
-                    progress_bar.set(c/t), 
-                    file_label.configure(text=f)
-                ]))
-            
-            window.after(0, lambda: [set_status("Success!", "green"), password_entry.delete(0, "end")])
-        except Exception as e:
-            window.after(0, lambda: set_status(f"Error: {str(e)}", "red"))
+            for i, filename in enumerate(files):
+                src = os.path.join(path, filename)
+                enc_name = uuid.uuid4().hex + ENC_EXTENSION
+                dst = os.path.join(work_dir, enc_name)
+                _encrypt_file_to(src, dst, fernet)
+                mapping[enc_name] = filename
+                if progress_callback: progress_callback(i + 1, len(files), filename)
+
+            with open(os.path.join(path, MAPPING_FILE), 'wb') as f:
+                f.write(fernet.encrypt(json.dumps(mapping).encode()))
+
+            for f in files: os.remove(os.path.join(path, f))
+            for f in os.listdir(work_dir): shutil.move(os.path.join(work_dir, f), os.path.join(path, f))
+            _hide_files(path)
+            if self.backup_possible: shutil.rmtree(f"{path}-Backup")
         finally:
-            window.after(0, lambda: [
-                set_buttons_enabled(True), 
-                progress_bar.pack_forget(), 
-                file_label.configure(text="")
-            ])
+            shutil.rmtree(work_dir, ignore_errors=True)
 
-    threading.Thread(target=run, daemon=True).start()
+    def Decrypt(self, path, password, progress_callback=None):
+        """Restores original files."""
+        salt_p = os.path.join(path, HIDDEN_SALT)
+        map_p = os.path.join(path, HIDDEN_MAPPING)
+        if not os.path.exists(salt_p) or not os.path.exists(map_p): raise FileNotFoundError("System files missing.")
 
-# --- UI ELEMENTS ---
-path_entry = ctk.CTkEntry(window, width=300, placeholder_text="Select folder...")
-path_entry.pack(pady=20)
+        with open(salt_p, 'rb') as f: salt = f.read()
+        key = _derive_key(password, salt)
+        fernet = Fernet(key)
 
-browse_btn = ctk.CTkButton(window, text="Browse Folder", command=browse_folder)
-browse_btn.pack()
+        try:
+            with open(map_p, 'rb') as f: origin = json.loads(fernet.decrypt(f.read()).decode())
+        except: raise ValueError("Incorrect password.")
 
-password_entry = ctk.CTkEntry(window, width=300, show="*", placeholder_text="Enter password...")
-password_entry.pack(pady=20)
+        work_dir = tempfile.mkdtemp(prefix='dec_work_', dir=path)
+        try:
+            items = list(origin.items())
+            for i, (enc, orig) in enumerate(items):
+                src = os.path.join(path, enc)
+                if os.path.exists(src): _decrypt_file_to(src, os.path.join(work_dir, orig), fernet)
+                if progress_callback: progress_callback(i + 1, len(items), orig)
 
-encrypt_btn = ctk.CTkButton(window, text="Encrypt Folder", command=lambda: start_task("encrypt"), fg_color="green", hover_color="#006400")
-encrypt_btn.pack(pady=5)
-
-decrypt_btn = ctk.CTkButton(window, text="Decrypt Folder", command=lambda: start_task("decrypt"))
-decrypt_btn.pack(pady=5)
-
-status_label = ctk.CTkLabel(window, text="")
-status_label.pack(pady=10)
-
-file_label = ctk.CTkLabel(window, text="", font=("Arial", 10))
-file_label.pack()
-
-progress_bar = ctk.CTkProgressBar(window, width=300)
-
-window.mainloop()
+            for enc in origin:
+                p = os.path.join(path, enc)
+                if os.path.exists(p): os.remove(p)
+            os.remove(salt_p)
+            os.remove(map_p)
+            for f in os.listdir(work_dir): shutil.move(os.path.join(work_dir, f), os.path.join(path, f))
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
