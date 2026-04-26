@@ -5,8 +5,8 @@ This module handles the heavy lifting of securing your files.
 It uses 'Fernet' (Symmetric encryption) and PBKDF2 (Password-based key derivation)
 to ensure that files are unreadable without the correct password.
 """
-# Fernet uses AES-128 in CBC mode with HMAC
-# This ensures your files are not tampered with
+# Fernet uses AES-128 in CBC mode with an HMAC for authentication.
+# This ensures that files cannot be tampered with while encrypted.
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -15,15 +15,18 @@ import json
 import os
 import shutil
 import sys
+import subprocess
 import tempfile
 import uuid
 
 # --- CONFIGURATION & CONSTANTS ---
+# These variables define how the program recognizes its own system files.
 SALT_FILE = 'salt.bin'
 MAPPING_FILE = 'file_mapping.json'
 ENC_EXTENSION = '.enc'
-HEADER_SIZE = 4096 
+HEADER_SIZE = 4096 # We encrypt the first 4KB separately to handle large files efficiently.
 
+# Handle hidden files differently based on the Operating System (Windows vs Linux/Mac)
 if sys.platform != 'win32':
     HIDDEN_SALT = '.salt.bin'
     HIDDEN_MAPPING = '.file_mapping.json'
@@ -33,149 +36,239 @@ else:
 
 SYSTEM_FILES = {SALT_FILE, MAPPING_FILE, HIDDEN_SALT, HIDDEN_MAPPING}
 
+
 def _derive_key(password: str, salt: bytes) -> bytes:
-    """Derives a secure 32-byte key from a password and salt."""
+    """
+    Turns a human-readable password into a mathematically strong 32-byte key.
+    
+    Args:
+        password: The string the user typed.
+        salt: Random data that makes the key unique even if two users use the same password.
+        
+    Returns:
+        A URL-safe base64 encoded key.
+    """
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=100000,
+        iterations=100000, # More iterations = harder for hackers to guess via brute force.
     )
     return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
-def _hide_files(path):
-    """Hides system files using OS-specific commands."""
+
+def _encrypt_file_to(src: str, dst: str, fernet: Fernet) -> None:
+    """
+    Reads a file, encrypts its contents, and writes it to a new location.
+    """
+    with open(src, 'rb') as f:
+        header = f.read(HEADER_SIZE)
+        rest = f.read()
+
+    encrypted_header = fernet.encrypt(header)
+    encrypted_rest = fernet.encrypt(rest) if rest else b''
+    
+    # We store the length of the header so we know where it ends during decryption.
+    header_len = len(encrypted_header).to_bytes(8, 'big')
+
+    with open(dst, 'wb') as f:
+        f.write(header_len)
+        f.write(encrypted_header)
+        f.write(encrypted_rest)
+
+
+def _decrypt_file_to(src: str, dst: str, fernet: Fernet) -> None:
+    """
+    Reverses the encryption process to restore the original file.
+    """
+    with open(src, 'rb') as f:
+        # Read the first 8 bytes to find out how long the encrypted header is.
+        header_len = int.from_bytes(f.read(8), 'big')
+        encrypted_header = f.read(header_len)
+        encrypted_rest = f.read()
+
+    decrypted_header = fernet.decrypt(encrypted_header)
+    decrypted_rest = fernet.decrypt(encrypted_rest) if encrypted_rest else b''
+
+    with open(dst, 'wb') as f:
+        f.write(decrypted_header)
+        f.write(decrypted_rest)
+
+
+def _hide_files(path: str) -> None:
+    """
+    Hides the salt and mapping files so the folder looks clean.
+    """
     if sys.platform == 'win32':
-        for f in [SALT_FILE, MAPPING_FILE]:
-            p = os.path.join(path, f)
-            if os.path.exists(p):
-                os.system(f'attrib +h +s "{p}"')
+        # On Windows, we use the 'attrib' command to set hidden (+h) and system (+s) flags.
+        for name in [SALT_FILE, MAPPING_FILE]:
+            target = os.path.join(path, name)
+            if os.path.exists(target):
+                subprocess.run(['attrib', '+h', '+s', target], check=True)
+    else:
+        # On Linux/macOS, simply adding a dot '.' to the start of a filename hides it.
+        for src, dst in [(SALT_FILE, HIDDEN_SALT), (MAPPING_FILE, HIDDEN_MAPPING)]:
+            s = os.path.join(path, src)
+            d = os.path.join(path, dst)
+            if os.path.exists(s):
+                os.rename(s, d)
 
-def _encrypt_file_to(src, dst, fernet):
-    """Encrypts the header of a file and streams the rest to a destination."""
-    with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
-        header = f_in.read(HEADER_SIZE)
-        if header:
-            f_out.write(fernet.encrypt(header))
-        shutil.copyfileobj(f_in, f_out)
 
-def _decrypt_file_to(src, dst, fernet):
-    """Decrypts a file header and reconstructs the original file."""
-    with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
-        full_data = f_in.read()
-        # Find the end of the Fernet token (always ends in '=')
-        split_point = full_data.find(b'=', 0, 8192) + 1
-        header = full_data[:split_point]
-        body = full_data[split_point:]
-        
-        f_out.write(fernet.decrypt(header))
-        f_out.write(body)
+def _show_files(path: str) -> None:
+    """
+    Makes system files visible again so the program can read them.
+    """
+    if sys.platform == 'win32':
+        for name in [SALT_FILE, MAPPING_FILE]:
+            target = os.path.join(path, name)
+            if os.path.exists(target):
+                subprocess.run(['attrib', '-h', '-s', target], check=True)
+    else:
+        for src, dst in [(HIDDEN_SALT, SALT_FILE), (HIDDEN_MAPPING, MAPPING_FILE)]:
+            s = os.path.join(path, src)
+            d = os.path.join(path, dst)
+            if os.path.exists(s):
+                os.rename(s, d)
+
 
 class Encryption:
+    """
+    The main class used to manage the encryption and decryption of entire folders.
+    """
     def __init__(self):
-        self.backup_possible = False
+        self.key = None
+        self.salt = None
+        self.origin = {} # Stores 'Encrypted_Name: Original_Name' mapping.
 
-    def check_backup_feasibility(self, path):
-        """Calculates folder size vs free disk space to see if a backup can be made."""
-        total_size = 0
-        for dirpath, _, filenames in os.walk(path):
-            for f in filenames:
-                fp = os.path.join(dirpath, f)
-                if not os.path.islink(fp):
-                    total_size += os.path.getsize(fp)
+    def Encrypt(self, path: str, password: str, progress_callback=None) -> None:
+        """
+        Encrypts all eligible files in a directory.
         
-        _, _, free = shutil.disk_usage(os.path.abspath(path))
-        # Require folder size + 100MB buffer
-        self.backup_possible = free > (total_size + 104857600)
-        return self.backup_possible
+        Args:
+            path: Folder to secure.
+            password: Password to use for key derivation.
+            progress_callback: A function to update a progress bar in the GUI.
+        """
+        path = os.path.abspath(path)
 
-    def Encrypt(self, path, password, progress_callback=None):
-        """Encrypts all files in a folder, renames them to UUIDs, and creates a mapping."""
-        if self.backup_possible:
-            backup_path = f"{path}-Backup"
-            if os.path.exists(backup_path):
-                shutil.rmtree(backup_path)
-            shutil.copytree(path, backup_path)
+        # 1. Find all files that aren't already encrypted or part of the system.
+        candidates = [
+            f for f in os.listdir(path)
+            if os.path.isfile(os.path.join(path, f))
+            and f not in SYSTEM_FILES
+            and not f.endswith(ENC_EXTENSION)
+        ]
 
-        salt = os.urandom(16)
-        with open(os.path.join(path, SALT_FILE), 'wb') as f:
-            f.write(salt)
+        if not candidates:
+            raise ValueError("No eligible files found to encrypt.")
 
-        key = _derive_key(password, salt)
-        fernet = Fernet(key)
+        total = len(candidates)
+        self.origin = {}
+        
+        # 2. Setup security (Salt + Key)
+        self.salt = os.urandom(16) # Generate 16 bytes of random 'salt'.
+        self.key = _derive_key(password, self.salt)
+        fernet = Fernet(self.key)
 
-        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f not in SYSTEM_FILES]
-        mapping = {}
+        # 3. Use a temporary directory for safety (prevents data loss if crash occurs).
         work_dir = tempfile.mkdtemp(prefix='enc_work_', dir=path)
 
         try:
-            for i, filename in enumerate(files):
+            for i, filename in enumerate(candidates):
                 src = os.path.join(path, filename)
+                # Give the encrypted file a random name (UUID) to hide what it is.
                 enc_name = uuid.uuid4().hex + ENC_EXTENSION
                 dst = os.path.join(work_dir, enc_name)
                 
                 _encrypt_file_to(src, dst, fernet)
-                mapping[enc_name] = filename
-                
+                self.origin[enc_name] = filename # Remember the original name.
+
                 if progress_callback:
-                    progress_callback(i + 1, len(files), filename)
+                    progress_callback(i + 1, total, filename)
 
-            # Save the encrypted mapping file
-            with open(os.path.join(path, MAPPING_FILE), 'wb') as f:
-                f.write(fernet.encrypt(json.dumps(mapping).encode()))
+            # 4. Save the 'Mapping' so we know how to rename files back later.
+            mapping_json = json.dumps(self.origin)
+            encrypted_mapping = fernet.encrypt(mapping_json.encode())
 
-            # Finalize: Remove originals and move encrypted files into place
-            for f in files:
-                os.remove(os.path.join(path, f))
-            for f in os.listdir(work_dir):
-                shutil.move(os.path.join(work_dir, f), os.path.join(path, f))
+            salt_path = os.path.join(path, SALT_FILE)
+            mapping_path = os.path.join(path, MAPPING_FILE)
 
-            _hide_files(path)
-            if self.backup_possible:
-                shutil.rmtree(f"{path}-Backup")
+            with open(salt_path, 'wb') as f:
+                f.write(self.salt)
+            with open(mapping_path, 'wb') as f:
+                f.write(encrypted_mapping)
 
-        finally:
+            # 5. Cleanup: Delete original files and move encrypted ones into place.
+            for filename in candidates:
+                os.remove(os.path.join(path, filename))
+
+            for item in os.listdir(work_dir):
+                shutil.move(os.path.join(work_dir, item), os.path.join(path, item))
+
+        except Exception:
             shutil.rmtree(work_dir, ignore_errors=True)
+            raise
 
-    def Decrypt(self, path, password, progress_callback=None):
-        """Restores files to their original names using the mapping and password."""
-        salt_p = os.path.join(path, HIDDEN_SALT)
-        map_p = os.path.join(path, HIDDEN_MAPPING)
+        shutil.rmtree(work_dir, ignore_errors=True)
+        _hide_files(path)
 
-        if not os.path.exists(salt_p) or not os.path.exists(map_p):
-            raise FileNotFoundError("Decryption system files are missing.")
+    def Decrypt(self, path: str, password: str, progress_callback=None) -> None:
+        """
+        Decrypts files and restores their original names.
+        """
+        path = os.path.abspath(path)
 
-        with open(salt_p, 'rb') as f:
-            salt = f.read()
+        _show_files(path)
+
+        salt_path = os.path.join(path, SALT_FILE)
+        mapping_path = os.path.join(path, MAPPING_FILE)
+
+        if not os.path.exists(salt_path) or not os.path.exists(mapping_path):
+            raise FileNotFoundError("No encrypted files found in this folder.")
+
+        # 1. Load the salt and reconstruct the key.
+        with open(salt_path, 'rb') as f:
+            salt = f.read(16)
 
         key = _derive_key(password, salt)
         fernet = Fernet(key)
 
+        # 2. Try to decrypt the mapping file. If this fails, the password is wrong.
         try:
-            with open(map_p, 'rb') as f:
-                origin = json.loads(fernet.decrypt(f.read()).decode())
+            with open(mapping_path, 'rb') as f:
+                encrypted_mapping = f.read()
+            origin = json.loads(fernet.decrypt(encrypted_mapping).decode())
         except Exception:
+            _hide_files(path) # Hide files again before exiting.
             raise ValueError("Incorrect password.")
 
+        total = len(origin)
         work_dir = tempfile.mkdtemp(prefix='dec_work_', dir=path)
+
         try:
-            items = list(origin.items())
-            for i, (enc, orig) in enumerate(items):
-                src = os.path.join(path, enc)
+            # 3. Decrypt every file back to its original name.
+            for i, (enc_name, orig_name) in enumerate(origin.items()):
+                src = os.path.join(path, enc_name)
+                dst = os.path.join(work_dir, orig_name)
                 if os.path.exists(src):
-                    _decrypt_file_to(src, os.path.join(work_dir, orig), fernet)
+                    _decrypt_file_to(src, dst, fernet)
+
                 if progress_callback:
-                    progress_callback(i + 1, len(items), orig)
+                    progress_callback(i + 1, total, orig_name)
 
-            # Cleanup and restore
-            for enc in origin:
-                p = os.path.join(path, enc)
-                if os.path.exists(p): os.remove(p)
-            
-            os.remove(salt_p)
-            os.remove(map_p)
+            # 4. Cleanup encrypted files and move originals back.
+            for enc_name in origin:
+                enc_path = os.path.join(path, enc_name)
+                if os.path.exists(enc_path):
+                    os.remove(enc_path)
 
-            for f in os.listdir(work_dir):
-                shutil.move(os.path.join(work_dir, f), os.path.join(path, f))
-        finally:
+            for item in os.listdir(work_dir):
+                shutil.move(os.path.join(work_dir, item), os.path.join(path, item))
+
+        except Exception:
             shutil.rmtree(work_dir, ignore_errors=True)
+            raise
+
+        shutil.rmtree(work_dir, ignore_errors=True)
+        os.remove(salt_path)
+        os.remove(mapping_path)
