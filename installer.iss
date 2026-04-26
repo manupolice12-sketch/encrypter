@@ -1,6 +1,6 @@
 [Setup]
 AppName=Encrypter
-AppVersion=1.0.0
+AppVersion=1.3.0
 DefaultDirName={autopf}\Encrypter
 DefaultGroupName=Encrypter
 UninstallDisplayIcon={app}\Encrypter.exe
