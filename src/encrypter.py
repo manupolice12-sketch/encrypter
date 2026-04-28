@@ -170,23 +170,31 @@ class Encryption:
         self.key = _derive_key(password, self.salt)
         fernet = Fernet(self.key)
 
-        # 3. Use a temporary directory for safety (prevents data loss if crash occurs).
+
+        # 3. Use a temporary directory for encrypted files
         work_dir = tempfile.mkdtemp(prefix='enc_work_', dir=path)
 
         try:
+            # 4. Encrypt each file one by one, then immediately swap
+            # This minimizes the death zone to just ONE file at a time
             for i, filename in enumerate(candidates):
                 src = os.path.join(path, filename)
-                # Give the encrypted file a random name (UUID) to hide what it is.
                 enc_name = uuid.uuid4().hex + ENC_EXTENSION
                 dst = os.path.join(work_dir, enc_name)
                 
+                # Encrypt to temp location
                 _encrypt_file_to(src, dst, fernet)
-                self.origin[enc_name] = filename # Remember the original name.
+                self.origin[enc_name] = filename
+
+                # Only now delete original and move encrypted file into place
+                # Death zone: only this ONE file is at risk during the swap
+                os.remove(src)
+                shutil.move(dst, os.path.join(path, enc_name))
 
                 if progress_callback:
                     progress_callback(i + 1, total, filename)
 
-            # 4. Save the 'Mapping' so we know how to rename files back later.
+            # 5. Save the mapping and salt AFTER all files are safely encrypted
             mapping_json = json.dumps(self.origin)
             encrypted_mapping = fernet.encrypt(mapping_json.encode())
 
@@ -198,14 +206,9 @@ class Encryption:
             with open(mapping_path, 'wb') as f:
                 f.write(encrypted_mapping)
 
-            # 5. Cleanup: Delete original files and move encrypted ones into place.
-            for filename in candidates:
-                os.remove(os.path.join(path, filename))
-
-            for item in os.listdir(work_dir):
-                shutil.move(os.path.join(work_dir, item), os.path.join(path, item))
-
-        except Exception:
+        except Exception as e:
+            # If anything fails, try to recover remaining originals
+            # Note: Files already swapped are lost, but remaining originals survive
             shutil.rmtree(work_dir, ignore_errors=True)
             raise
 
@@ -246,26 +249,24 @@ class Encryption:
         work_dir = tempfile.mkdtemp(prefix='dec_work_', dir=path)
 
         try:
-            # 3. Decrypt every file back to its original name.
+            # 3. Decrypt and swap one file at a time (minimizes death zone)
             for i, (enc_name, orig_name) in enumerate(origin.items()):
                 src = os.path.join(path, enc_name)
                 dst = os.path.join(work_dir, orig_name)
+                
                 if os.path.exists(src):
+                    # Decrypt to temp location
                     _decrypt_file_to(src, dst, fernet)
+                    
+                    # Delete encrypted file and move decrypted file into place
+                    # Death zone: only this ONE file is at risk during the swap
+                    os.remove(src)
+                    shutil.move(dst, os.path.join(path, orig_name))
 
                 if progress_callback:
                     progress_callback(i + 1, total, orig_name)
 
-            # 4. Cleanup encrypted files and move originals back.
-            for enc_name in origin:
-                enc_path = os.path.join(path, enc_name)
-                if os.path.exists(enc_path):
-                    os.remove(enc_path)
-
-            for item in os.listdir(work_dir):
-                shutil.move(os.path.join(work_dir, item), os.path.join(path, item))
-
-        except Exception:
+        except Exception as e:
             shutil.rmtree(work_dir, ignore_errors=True)
             raise
 

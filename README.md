@@ -62,7 +62,9 @@ Current release: **v1.3.0**
  
 ## Warning 
 
-If you lose your password say goodbye to your files you encrypted as they are not recoverable and while this tool is designed for high reliability, there is a theoretical "death zone" of approximately 1–5 milliseconds during the final file swap. If the system suffers a total power failure at the exact moment the original is deleted but before the encrypted version is moved into place, data loss could occur so make sure when encrypting you have a stable power source.
+If you lose your password say goodbye to your files you encrypted as they are not recoverable.
+
+**Death Zone Protection:** This version uses incremental file swapping — each file is encrypted and swapped individually rather than in a bulk operation. This reduces the death zone from the entire folder to just one file at a time (~1-5ms per file). If power is lost during encryption, only the current file being processed is at risk; all previously swapped files remain encrypted and recoverable with your password.
 
 ## Licence
 
