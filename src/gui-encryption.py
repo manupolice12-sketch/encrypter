@@ -8,6 +8,7 @@ It acts as the 'bridge' between the user and the Encryption logic.
 import threading
 import customtkinter as ctk
 import tkinter as tk
+from tkinter import filedialog
 from encrypter import Encryption
 import os 
 
@@ -21,7 +22,7 @@ tool = Encryption()
 # Create the main window
 window = ctk.CTk()
 window.title("File Encrypter and Decrypter")
-window.geometry("420x380") # Increased height slightly to accommodate the labels
+window.geometry("420x380")
 window.resizable(False, False)
 
 def set_icon():
@@ -53,7 +54,7 @@ path_entry.pack(side="left", expand=True, fill="x", padx=(0, 8))
 
 def browse():
     """Opens a Windows/Linux/Mac folder picker."""
-    path = tk.filedialog.askdirectory(title="Select Folder")
+    path = filedialog.askdirectory(title="Select Folder")
     if path:
         path_entry.delete(0, "end")
         path_entry.insert(0, path)
@@ -184,7 +185,8 @@ def start_task(mode):
             window.after(0, lambda: set_status(f"Success: Folder {mode}ed!", "green"))
             window.after(0, lambda: password_entry.delete(0, "end"))
         except Exception as e:
-            window.after(0, lambda: set_status(f"Error: {str(e)}", "red"))
+            msg = str(e)
+            window.after(0, lambda m=msg: set_status(f"Error: {m}", "red"))
         finally:
             # Clean up UI
             window.after(0, lambda: set_buttons_enabled(True))
