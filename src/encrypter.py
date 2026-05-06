@@ -18,13 +18,14 @@ import sys
 import subprocess
 import tempfile
 import uuid
+import zlib
 
 # --- CONFIGURATION & CONSTANTS ---
 # These variables define how the program recognizes its own system files.
 SALT_FILE = 'salt.bin'
 MAPPING_FILE = 'file_mapping.json'
 ENC_EXTENSION = '.enc'
-HEADER_SIZE = 4096 # We encrypt the first 4KB separately to handle large files efficiently.
+CHUNK_SIZE = 4096 # Process file in 4KB chunks to save memory.
 
 # Handle hidden files differently based on the Operating System (Windows vs Linux/Mac)
 if sys.platform != 'win32':
@@ -61,38 +62,39 @@ def _encrypt_file_to(src: str, dst: str, fernet: Fernet) -> None:
     """
     Reads a file, encrypts its contents, and writes it to a new location.
     """
-    with open(src, 'rb') as f:
-        header = f.read(HEADER_SIZE)
-        rest = f.read()
-
-    encrypted_header = fernet.encrypt(header)
-    encrypted_rest = fernet.encrypt(rest) if rest else b''
-    
-    # We store the length of the header so we know where it ends during decryption.
-    header_len = len(encrypted_header).to_bytes(8, 'big')
-
-    with open(dst, 'wb') as f:
-        f.write(header_len)
-        f.write(encrypted_header)
-        f.write(encrypted_rest)
+    with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
+        while True:
+            chunk = f_in.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            
+            # Compress then Encrypt
+            compressed_chunk = zlib.compress(chunk)
+            encrypted_chunk = fernet.encrypt(compressed_chunk)
+            
+            # Write length of encrypted chunk so we know how much to read during decryption
+            chunk_len = len(encrypted_chunk).to_bytes(4, 'big')
+            f_out.write(chunk_len)
+            f_out.write(encrypted_chunk)
 
 
 def _decrypt_file_to(src: str, dst: str, fernet: Fernet) -> None:
     """
     Reverses the encryption process to restore the original file.
     """
-    with open(src, 'rb') as f:
-        # Read the first 8 bytes to find out how long the encrypted header is.
-        header_len = int.from_bytes(f.read(8), 'big')
-        encrypted_header = f.read(header_len)
-        encrypted_rest = f.read()
-
-    decrypted_header = fernet.decrypt(encrypted_header)
-    decrypted_rest = fernet.decrypt(encrypted_rest) if encrypted_rest else b''
-
-    with open(dst, 'wb') as f:
-        f.write(decrypted_header)
-        f.write(decrypted_rest)
+    with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
+        while True:
+            length_bytes = f_in.read(4)
+            if not length_bytes:
+                break
+            
+            chunk_len = int.from_bytes(length_bytes, 'big')
+            encrypted_chunk = f_in.read(chunk_len)
+            
+            # Decrypt then Decompress
+            compressed_chunk = fernet.decrypt(encrypted_chunk)
+            decrypted_chunk = zlib.decompress(compressed_chunk)
+            f_out.write(decrypted_chunk)
 
 
 def _hide_files(path: str) -> None:
