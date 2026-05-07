@@ -3,7 +3,7 @@ name: Build and Release Cross-Platform
 on:
   push:
     tags:
-      - 'v*' # Only triggers on version tags like v1.1.0
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
       - name: Build Binary
         run: |
           python -m PyInstaller --onefile --windowed \
-          --name "Encrypter-Linux" \
+          --name "Encrypter" \
           --add-data "src/image/icon.png:image" \
           --add-data "src/encrypter.py:." \
           src/gui-encryption.py
@@ -50,13 +50,14 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           cd dist
-          zip -r Encrypter-MacOS.zip Encrypter-macos-latest.app
+          zip -r Encrypter-MacOS.zip Encrypter.app
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: false
           files: |
-            dist/Encrypter-Linux
+            dist/Encrypter
             dist/Encrypter-MacOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
