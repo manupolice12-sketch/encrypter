@@ -40,7 +40,6 @@ jobs:
 
       - name: Build Binary
         run: |
-          # We use specific names to avoid confusion in the release assets
           python -m PyInstaller --onefile --windowed \
           --name "Encrypter-Linux" \
           --add-data "src/image/icon.png:image" \
@@ -51,14 +50,13 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           cd dist
-          # macOS .app is a folder, must be zipped for Release
           zip -r Encrypter-MacOS.zip Encrypter-macos-latest.app
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Encrypter-ubuntu-latest
+            dist/Encrypter-Linux
             dist/Encrypter-MacOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
