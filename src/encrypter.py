@@ -1,7 +1,7 @@
 """
 CORE ENCRYPTION ENGINE
 ----------------------
-This module handles the heavy lifting of securing your files. 
+This module handles the heavy lifting of securing your files.
 It uses 'Fernet' (Symmetric encryption) and PBKDF2 (Password-based key derivation)
 to ensure that files are unreadable without the correct password.
 """
@@ -21,13 +21,18 @@ import uuid
 import zlib
 
 # --- CONFIGURATION & CONSTANTS ---
-# These variables define how the program recognizes its own system files.
 SALT_FILE = 'salt.bin'
 MAPPING_FILE = 'file_mapping.json'
 ENC_EXTENSION = '.enc'
-CHUNK_SIZE = 4096 # Process file in 4KB chunks to save memory.
+CHUNK_SIZE = 65536  # 64 KB — large enough to amortise Fernet overhead per token
 
-# Handle hidden files differently based on the Operating System (Windows vs Linux/Mac)
+# Minimum password requirements
+MIN_PASSWORD_LENGTH = 8
+
+# PBKDF2 iteration count. 600 000 is the OWASP 2023 recommendation for SHA-256.
+PBKDF2_ITERATIONS = 600_000
+
+# Handle hidden files differently based on the Operating System
 if sys.platform != 'win32':
     HIDDEN_SALT = '.salt.bin'
     HIDDEN_MAPPING = '.file_mapping.json'
@@ -38,43 +43,58 @@ else:
 SYSTEM_FILES = {SALT_FILE, MAPPING_FILE, HIDDEN_SALT, HIDDEN_MAPPING}
 
 
+def validate_password(password: str) -> None:
+    """
+    Raise ValueError if the password does not meet minimum requirements.
+
+    Args:
+        password: The password string to check.
+
+    Raises:
+        ValueError: If the password is too short.
+    """
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+        )
+
+
 def _derive_key(password: str, salt: bytes) -> bytes:
     """
     Turns a human-readable password into a mathematically strong 32-byte key.
-    
+
     Args:
         password: The string the user typed.
-        salt: Random data that makes the key unique even if two users use the same password.
-        
+        salt: Random bytes that make the key unique even for identical passwords.
+
     Returns:
-        A URL-safe base64 encoded key.
+        A URL-safe base64 encoded key suitable for Fernet.
     """
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=100000, # More iterations = harder for hackers to guess via brute force.
+        iterations=PBKDF2_ITERATIONS,
     )
     return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
 
 def _encrypt_file_to(src: str, dst: str, fernet: Fernet) -> None:
     """
-    Reads a file, encrypts its contents, and writes it to a new location.
+    Reads a file, compresses and encrypts its contents in chunks,
+    and writes the result to dst.
+
+    Each chunk is prefixed with a 4-byte big-endian length so the decoder
+    knows how many bytes to read for each Fernet token.
     """
     with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
         while True:
             chunk = f_in.read(CHUNK_SIZE)
             if not chunk:
                 break
-            
-            # Compress then Encrypt
             compressed_chunk = zlib.compress(chunk)
             encrypted_chunk = fernet.encrypt(compressed_chunk)
-            
-            # Write length of encrypted chunk so we know how much to read during decryption
-            chunk_len = len(encrypted_chunk).to_bytes(4, 'big')
-            f_out.write(chunk_len)
+            f_out.write(len(encrypted_chunk).to_bytes(4, 'big'))
             f_out.write(encrypted_chunk)
 
 
@@ -87,28 +107,20 @@ def _decrypt_file_to(src: str, dst: str, fernet: Fernet) -> None:
             length_bytes = f_in.read(4)
             if not length_bytes:
                 break
-            
             chunk_len = int.from_bytes(length_bytes, 'big')
             encrypted_chunk = f_in.read(chunk_len)
-            
-            # Decrypt then Decompress
             compressed_chunk = fernet.decrypt(encrypted_chunk)
-            decrypted_chunk = zlib.decompress(compressed_chunk)
-            f_out.write(decrypted_chunk)
+            f_out.write(zlib.decompress(compressed_chunk))
 
 
 def _hide_files(path: str) -> None:
-    """
-    Hides the salt and mapping files so the folder looks clean.
-    """
+    """Hides the salt and mapping files so the folder looks clean."""
     if sys.platform == 'win32':
-        # On Windows, we use the 'attrib' command to set hidden (+h) and system (+s) flags.
         for name in [SALT_FILE, MAPPING_FILE]:
             target = os.path.join(path, name)
             if os.path.exists(target):
                 subprocess.run(['attrib', '+h', '+s', target], check=True)
     else:
-        # On Linux/macOS, simply adding a dot '.' to the start of a filename hides it.
         for src, dst in [(SALT_FILE, HIDDEN_SALT), (MAPPING_FILE, HIDDEN_MAPPING)]:
             s = os.path.join(path, src)
             d = os.path.join(path, dst)
@@ -117,9 +129,7 @@ def _hide_files(path: str) -> None:
 
 
 def _show_files(path: str) -> None:
-    """
-    Makes system files visible again so the program can read them.
-    """
+    """Makes system files visible again so the program can read them."""
     if sys.platform == 'win32':
         for name in [SALT_FILE, MAPPING_FILE]:
             target = os.path.join(path, name)
@@ -135,25 +145,32 @@ def _show_files(path: str) -> None:
 
 class Encryption:
     """
-    The main class used to manage the encryption and decryption of entire folders.
+    Manages encryption and decryption of all eligible files in a folder.
+
+    Each instance is stateless between operations — it is safe to reuse
+    the same instance for multiple Encrypt / Decrypt calls.
     """
+
     def __init__(self):
         self.key = None
         self.salt = None
-        self.origin = {} # Stores 'Encrypted_Name: Original_Name' mapping.
+        self.origin = {}  # {encrypted_name: original_name}
 
     def Encrypt(self, path: str, password: str, progress_callback=None) -> None:
         """
         Encrypts all eligible files in a directory.
-        
+
         Args:
             path: Folder to secure.
             password: Password to use for key derivation.
-            progress_callback: A function to update a progress bar in the GUI.
+            progress_callback: Optional function(current, total, filename).
+
+        Raises:
+            ValueError: If the password is too short or no eligible files exist.
         """
+        validate_password(password)
         path = os.path.abspath(path)
 
-        # 1. Find all files that aren't already encrypted or part of the system.
         candidates = [
             f for f in os.listdir(path)
             if os.path.isfile(os.path.join(path, f))
@@ -166,51 +183,41 @@ class Encryption:
 
         total = len(candidates)
         self.origin = {}
-        
-        # 2. Setup security (Salt + Key)
-        self.salt = os.urandom(16) # Generate 16 bytes of random 'salt'.
+
+        self.salt = os.urandom(16)
         self.key = _derive_key(password, self.salt)
         fernet = Fernet(self.key)
 
-
-        # 3. Use a temporary directory for encrypted files
+        # Temp dir on the same filesystem ensures shutil.move is an atomic rename.
         work_dir = tempfile.mkdtemp(prefix='enc_work_', dir=path)
 
         try:
-            # 4. Encrypt each file one by one, then immediately swap
-            # This minimizes the death zone to just ONE file at a time
             for i, filename in enumerate(candidates):
                 src = os.path.join(path, filename)
                 enc_name = uuid.uuid4().hex + ENC_EXTENSION
                 dst = os.path.join(work_dir, enc_name)
-                
-                # Encrypt to temp location
+
                 _encrypt_file_to(src, dst, fernet)
                 self.origin[enc_name] = filename
 
-                # Only now delete original and move encrypted file into place
-                # Death zone: only this ONE file is at risk during the swap
+                # Original is removed only after the encrypted copy exists
+                # safely in the temp dir — only one file is at risk at a time.
                 os.remove(src)
                 shutil.move(dst, os.path.join(path, enc_name))
 
                 if progress_callback:
                     progress_callback(i + 1, total, filename)
 
-            # 5. Save the mapping and salt AFTER all files are safely encrypted
+            # Persist mapping and salt only after all files are safely swapped.
             mapping_json = json.dumps(self.origin)
             encrypted_mapping = fernet.encrypt(mapping_json.encode())
 
-            salt_path = os.path.join(path, SALT_FILE)
-            mapping_path = os.path.join(path, MAPPING_FILE)
-
-            with open(salt_path, 'wb') as f:
+            with open(os.path.join(path, SALT_FILE), 'wb') as f:
                 f.write(self.salt)
-            with open(mapping_path, 'wb') as f:
+            with open(os.path.join(path, MAPPING_FILE), 'wb') as f:
                 f.write(encrypted_mapping)
 
-        except Exception as e:
-            # If anything fails, try to recover remaining originals
-            # Note: Files already swapped are lost, but remaining originals survive
+        except Exception:
             shutil.rmtree(work_dir, ignore_errors=True)
             raise
 
@@ -220,9 +227,17 @@ class Encryption:
     def Decrypt(self, path: str, password: str, progress_callback=None) -> None:
         """
         Decrypts files and restores their original names.
+
+        Args:
+            path: Folder to restore.
+            password: Password used during encryption.
+            progress_callback: Optional function(current, total, filename).
+
+        Raises:
+            FileNotFoundError: If no encrypted session is found, or files are missing.
+            ValueError: If the password is incorrect.
         """
         path = os.path.abspath(path)
-
         _show_files(path)
 
         salt_path = os.path.join(path, SALT_FILE)
@@ -231,44 +246,47 @@ class Encryption:
         if not os.path.exists(salt_path) or not os.path.exists(mapping_path):
             raise FileNotFoundError("No encrypted files found in this folder.")
 
-        # 1. Load the salt and reconstruct the key.
         with open(salt_path, 'rb') as f:
             salt = f.read(16)
 
         key = _derive_key(password, salt)
         fernet = Fernet(key)
 
-        # 2. Try to decrypt the mapping file. If this fails, the password is wrong.
+        # Decrypt the mapping first — wrong password raises here before any
+        # files are touched.
         try:
             with open(mapping_path, 'rb') as f:
                 encrypted_mapping = f.read()
             origin = json.loads(fernet.decrypt(encrypted_mapping).decode())
         except Exception:
-            _hide_files(path) # Hide files again before exiting.
+            _hide_files(path)
             raise ValueError("Incorrect password.")
+
+        # Verify all expected files are present before modifying anything.
+        missing = [enc for enc in origin if not os.path.exists(os.path.join(path, enc))]
+        if missing:
+            _hide_files(path)
+            raise FileNotFoundError(
+                f"{len(missing)} encrypted file(s) listed in the mapping are "
+                "missing from the folder. The folder may have been modified."
+            )
 
         total = len(origin)
         work_dir = tempfile.mkdtemp(prefix='dec_work_', dir=path)
 
         try:
-            # 3. Decrypt and swap one file at a time (minimizes death zone)
             for i, (enc_name, orig_name) in enumerate(origin.items()):
                 src = os.path.join(path, enc_name)
                 dst = os.path.join(work_dir, orig_name)
-                
-                if os.path.exists(src):
-                    # Decrypt to temp location
-                    _decrypt_file_to(src, dst, fernet)
-                    
-                    # Delete encrypted file and move decrypted file into place
-                    # Death zone: only this ONE file is at risk during the swap
-                    os.remove(src)
-                    shutil.move(dst, os.path.join(path, orig_name))
+
+                _decrypt_file_to(src, dst, fernet)
+                os.remove(src)
+                shutil.move(dst, os.path.join(path, orig_name))
 
                 if progress_callback:
                     progress_callback(i + 1, total, orig_name)
 
-        except Exception as e:
+        except Exception:
             shutil.rmtree(work_dir, ignore_errors=True)
             raise
 

@@ -9,11 +9,22 @@ Encrypter uses **Fernet symmetric encryption** with **PBKDF2** password-based ke
 - Every file is encrypted and renamed to a random UUID with the `.enc` extension
 - The original filenames are stored in an encrypted mapping file
 - The mapping file and salt are automatically hidden from view
-- Files are processed in **4KB chunks** to keep memory usage low regardless of file size
+- Files are processed in **64 KB chunks** to keep memory usage low regardless of file size
 - Each chunk is **compressed with zlib before encryption**, reducing file sizes
+- Before decryption begins, all expected files are verified to exist on disk — if any are missing, the operation is aborted safely
 - Subfolders are left untouched
 
 Decrypting with the correct password restores everything exactly as it was.
+
+## Security
+
+| Property | Detail |
+|---|---|
+| Encryption | Fernet (AES-128-CBC + HMAC-SHA256) |
+| Key derivation | PBKDF2-HMAC-SHA256 |
+| KDF iterations | 600,000 (OWASP 2023 recommendation) |
+| Salt | 16 bytes of `os.urandom()` per session |
+| Minimum password length | 8 characters |
 
 ## Installation
 
@@ -26,13 +37,14 @@ Then clone the repository:
 ```bash
 git clone https://github.com/manupolice12-sketch/encrypter
 ```
-or use the executables included in the releases
+
+Or use the executables included in the releases.
 
 ## Usage
 
 ### GUI
 
-Run `gui-encryption.py` to open the graphical interface. Select a folder using the Browse button, enter your password, then click Encrypt or Decrypt. If you're encrypting, a window will pop up asking you to confirm your password. Confirm it and the files will be encrypted.
+Run `gui-encryption.py` to open the graphical interface. Select a folder using the Browse button, enter your password, then click Encrypt or Decrypt. When encrypting, you will be asked to confirm your password and then confirm the operation before anything is changed.
 
 ```bash
 python gui-encryption.py
@@ -55,7 +67,7 @@ python cli-encryption.py
 
 ## Version
 
-Current release: **v1.4.0**
+Current release: **v1.5.0**
 
 ## Links
 
@@ -64,13 +76,13 @@ Current release: **v1.4.0**
 
 ## Warning
 
-If you lose your password say goodbye to your files you encrypted as they are not recoverable.
+If you lose your password, your files are not recoverable. There is no reset mechanism.
 
-**Death Zone Protection:** This version uses incremental file swapping — each file is encrypted and swapped individually rather than in a bulk operation. This reduces the death zone from the entire folder to just one file at a time (~1-5ms per file). If power is lost during encryption, only the current file being processed is at risk; all previously swapped files remain encrypted and recoverable with your password.
+**Death Zone Protection:** Files are encrypted and swapped one at a time. If power is lost during encryption, only the file currently being processed is at risk — all previously processed files remain safely encrypted and recoverable with your password.
 
 ## Compatibility Notice
 
-Files encrypted with versions prior to **v1.4.0** cannot be decrypted with this version due to the new chunk-based compression format. If you have files encrypted with an older version, decrypt them first before upgrading.
+Files encrypted with versions prior to **v1.4.0** cannot be decrypted with this version due to the chunk-based compression format introduced in v1.4.0. Decrypt those files first before upgrading.
 
 ## Licence
 
