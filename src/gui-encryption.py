@@ -126,6 +126,7 @@ def get_password_confirmation(title, text):
     dialog.geometry("300x160")
     dialog.resizable(False, False)
     dialog.attributes("-topmost", True) # Keep popup on top
+    dialog.wait_visibility() # To ensure everything works properly
     dialog.grab_set()
 
     ctk.CTkLabel(dialog, text=text).pack(pady=(15, 5))
