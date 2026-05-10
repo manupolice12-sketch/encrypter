@@ -3,7 +3,6 @@
 
 a = Analysis(
     ['src\\gui-encryption.py'],
-    ['src\\encrypter.py'],
     pathex=[],
     binaries=[],
     datas=[('src/image/icon.png', 'image/')],
