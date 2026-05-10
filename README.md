@@ -82,7 +82,7 @@ If you lose your password, your files are not recoverable. There is no reset mec
 
 ## Compatibility Notice
 
-Files encrypted with versions prior to **v1.5.0** cannot be decrypted with this version due to the chunk-based compression format introduced in v1.5.0. Decrypt those files first before upgrading.
+Files encrypted with versions prior to **v1.5.0** cannot be decrypted with this version due to the chunk-based compression format introduced in **v1.4.0** and as **v1.5.0** increased the **4 KB** chunk based encryption to **64 KB**. Decrypt those files first before upgrading.
 
 ## Licence
 
