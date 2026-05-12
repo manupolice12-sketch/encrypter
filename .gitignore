@@ -1,13 +1,6 @@
-# PyInstaller
 build/
 dist/
 *.exe
-
-# Python
 __pycache__/
 encrypter-venv/
-venv/
-.env
-
-# VS Code
 .vscode/
